@@ -109,6 +109,7 @@ import org.fossify.gallery.extensions.movePathsInRecycleBin
 import org.fossify.gallery.extensions.movePinnedDirectoriesToFront
 import org.fossify.gallery.extensions.openRecycleBin
 import org.fossify.gallery.extensions.removeInvalidDBDirectories
+import org.fossify.gallery.extensions.setScrollOnContent
 import org.fossify.gallery.extensions.storeDirectoryItems
 import org.fossify.gallery.extensions.tryDeleteFileDirItem
 import org.fossify.gallery.extensions.updateDBDirectory
@@ -477,7 +478,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
         }
 
         binding.mainMenu.requireToolbar().inflateMenu(menuId)
-        binding.mainMenu.toggleHideOnScroll(!config.scrollHorizontally)
+        binding.mainMenu.setScrollOnContent(!config.scrollHorizontally)
         binding.mainMenu.setupMenu()
 
         binding.mainMenu.onSearchOpenListener = {

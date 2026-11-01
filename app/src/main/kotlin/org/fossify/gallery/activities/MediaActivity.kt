@@ -83,6 +83,7 @@ import org.fossify.gallery.extensions.movePathsInRecycleBin
 import org.fossify.gallery.extensions.openPath
 import org.fossify.gallery.extensions.openRecycleBin
 import org.fossify.gallery.extensions.restoreRecycleBinPaths
+import org.fossify.gallery.extensions.setScrollOnContent
 import org.fossify.gallery.extensions.showRecycleBinEmptyingDialog
 import org.fossify.gallery.extensions.showRestoreConfirmationDialog
 import org.fossify.gallery.extensions.tryDeleteFileDirItem
@@ -180,7 +181,6 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         refreshMenuItems()
         storeStateVariables()
         setupEdgeToEdge(
-            padTopSystem = listOf(binding.mediaMenu),
             padBottomImeAndSystem = listOf(binding.mediaGrid)
         )
 
@@ -382,7 +382,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
 
     private fun setupOptionsMenu() {
         binding.mediaMenu.requireToolbar().inflateMenu(R.menu.menu_media)
-        binding.mediaMenu.toggleHideOnScroll(!config.scrollHorizontally)
+        binding.mediaMenu.setScrollOnContent(!config.scrollHorizontally)
         binding.mediaMenu.setupMenu()
 
         binding.mediaMenu.onSearchTextChangedListener = { text ->
