@@ -10,6 +10,7 @@ import android.widget.RelativeLayout
 import androidx.core.net.toUri
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.SimpleTarget
@@ -112,6 +113,7 @@ import org.fossify.gallery.models.ThumbnailItem
 import org.fossify.gallery.models.ThumbnailSection
 import java.io.File
 import java.io.IOException
+import kotlin.math.roundToInt
 
 class MediaActivity : SimpleActivity(), MediaOperationsListener {
     override var isSearchBarEnabled = true
@@ -204,7 +206,11 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         }
 
         if (mStoredCropThumbnails != config.cropThumbnails) {
+            setupLayoutManager()
+            handleGridSpacing()
+            binding.mediaGrid.invalidateItemDecorations()
             getMediaAdapter()?.updateCropThumbnails(config.cropThumbnails)
+            initZoomListener()
         }
 
         if (mStoredScrollHorizontally != config.scrollHorizontally) {
@@ -789,35 +795,53 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     }
 
     private fun setupGridLayoutManager() {
-        val layoutManager = binding.mediaGrid.layoutManager as MyGridLayoutManager
+        val useStaggered = !config.cropThumbnails && !config.scrollHorizontally
+        val spanCount = config.mediaColumnCnt
+        binding.mediaFastscroller.setStaggeredGridActive(useStaggered)
+        if (useStaggered) {
+            if (binding.mediaGrid.layoutManager !is StaggeredGridLayoutManager) {
+                binding.mediaGrid.layoutManager = StaggeredGridLayoutManager(spanCount, RecyclerView.VERTICAL)
+            }
+        } else {
+            if (binding.mediaGrid.layoutManager !is MyGridLayoutManager) {
+                binding.mediaGrid.layoutManager = MyGridLayoutManager(this, spanCount)
+            }
+        }
         if (config.scrollHorizontally) {
-            layoutManager.orientation = RecyclerView.HORIZONTAL
+            (binding.mediaGrid.layoutManager as MyGridLayoutManager).orientation = RecyclerView.HORIZONTAL
             binding.mediaRefreshLayout.layoutParams = RelativeLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         } else {
-            layoutManager.orientation = RecyclerView.VERTICAL
+            if (binding.mediaGrid.layoutManager is MyGridLayoutManager) {
+                (binding.mediaGrid.layoutManager as MyGridLayoutManager).orientation = RecyclerView.VERTICAL
+            }
             binding.mediaRefreshLayout.layoutParams = RelativeLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
 
-        layoutManager.spanCount = config.mediaColumnCnt
         val adapter = getMediaAdapter()
-        layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
-            override fun getSpanSize(position: Int): Int {
-                return if (adapter?.isASectionTitle(position) == true) {
-                    layoutManager.spanCount
-                } else {
-                    1
+        when (val layoutManager = binding.mediaGrid.layoutManager) {
+            is StaggeredGridLayoutManager -> layoutManager.spanCount = spanCount
+            is MyGridLayoutManager -> {
+                layoutManager.spanCount = spanCount
+                layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
+                    override fun getSpanSize(position: Int): Int = if (adapter?.isASectionTitle(position) == true) {
+                        layoutManager.spanCount
+                    } else 1
                 }
             }
         }
     }
 
     private fun setupListLayoutManager() {
+        binding.mediaFastscroller.setStaggeredGridActive(false)
+        if (binding.mediaGrid.layoutManager !is MyGridLayoutManager) {
+            binding.mediaGrid.layoutManager = MyGridLayoutManager(this, 1)
+        }
         val layoutManager = binding.mediaGrid.layoutManager as MyGridLayoutManager
         layoutManager.spanCount = 1
         layoutManager.orientation = RecyclerView.VERTICAL
@@ -832,7 +856,11 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         val viewType = config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath)
         if (viewType == VIEW_TYPE_GRID) {
             val spanCount = config.mediaColumnCnt
-            val spacing = config.thumbnailSpacing
+            val spacing = if (binding.mediaGrid.layoutManager is StaggeredGridLayoutManager) {
+                (config.thumbnailSpacing * resources.displayMetrics.density).roundToInt()
+            } else {
+                config.thumbnailSpacing
+            }
             val useGridPosition = media.firstOrNull() is ThumbnailSection
 
             var currentGridDecoration: GridSpacingItemDecoration? = null
@@ -862,17 +890,17 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     private fun initZoomListener() {
         val viewType = config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath)
         if (viewType == VIEW_TYPE_GRID) {
-            val layoutManager = binding.mediaGrid.layoutManager as MyGridLayoutManager
+            val layoutManager = binding.mediaGrid.layoutManager
             mZoomListener = object : MyRecyclerView.MyZoomListener {
                 override fun zoomIn() {
-                    if (layoutManager.spanCount > 1) {
+                    if (currentMediaColumnCount() > 1) {
                         reduceColumnCount()
                         getMediaAdapter()?.finishActMode()
                     }
                 }
 
                 override fun zoomOut() {
-                    if (layoutManager.spanCount < MAX_COLUMN_COUNT) {
+                    if (currentMediaColumnCount() < MAX_COLUMN_COUNT) {
                         increaseColumnCount()
                         getMediaAdapter()?.finishActMode()
                     }
@@ -896,7 +924,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             )
         }
 
-        val currentColumnCount = (binding.mediaGrid.layoutManager as MyGridLayoutManager).spanCount
+        val currentColumnCount = currentMediaColumnCount()
         RadioGroupDialog(this, items, currentColumnCount) {
             val newColumnCount = it as Int
             if (currentColumnCount != newColumnCount) {
@@ -917,12 +945,21 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     }
 
     private fun columnCountChanged() {
-        (binding.mediaGrid.layoutManager as MyGridLayoutManager).spanCount = config.mediaColumnCnt
+        when (val layoutManager = binding.mediaGrid.layoutManager) {
+            is StaggeredGridLayoutManager -> layoutManager.spanCount = config.mediaColumnCnt
+            is MyGridLayoutManager -> layoutManager.spanCount = config.mediaColumnCnt
+        }
         handleGridSpacing()
         refreshMenuItems()
         getMediaAdapter()?.apply {
             notifyItemRangeChanged(0, media.size)
         }
+    }
+
+    private fun currentMediaColumnCount() = when (val layoutManager = binding.mediaGrid.layoutManager) {
+        is StaggeredGridLayoutManager -> layoutManager.spanCount
+        is MyGridLayoutManager -> layoutManager.spanCount
+        else -> config.mediaColumnCnt
     }
 
     private fun isSetWallpaperIntent() = intent.getBooleanExtra(SET_WALLPAPER_INTENT, false)

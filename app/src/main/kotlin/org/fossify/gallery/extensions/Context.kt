@@ -74,6 +74,7 @@ import org.fossify.commons.helpers.SORT_BY_RANDOM
 import org.fossify.commons.helpers.SORT_BY_SIZE
 import org.fossify.commons.helpers.SORT_DESCENDING
 import org.fossify.commons.helpers.SORT_USE_NUMERIC_VALUE
+import org.fossify.commons.helpers.VIEW_TYPE_GRID
 import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.commons.helpers.sumByLong
 import org.fossify.commons.views.MySquareImageView
@@ -97,6 +98,7 @@ import org.fossify.gallery.helpers.ROUNDED_CORNERS_NONE
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_SMALL
 import org.fossify.gallery.helpers.SHOW_ALL
 import org.fossify.gallery.helpers.THUMBNAIL_FADE_DURATION_MS
+import org.fossify.gallery.helpers.ThumbnailAspectRatio
 import org.fossify.gallery.helpers.TYPE_GIFS
 import org.fossify.gallery.helpers.TYPE_IMAGES
 import org.fossify.gallery.helpers.TYPE_PORTRAITS
@@ -604,7 +606,7 @@ fun Context.getFolderNameFromPath(path: String): String {
 fun Context.loadImage(
     type: Int,
     path: String,
-    target: MySquareImageView,
+    target: ImageView,
     horizontalScroll: Boolean,
     animateGifs: Boolean,
     cropThumbnails: Boolean,
@@ -613,7 +615,7 @@ fun Context.loadImage(
     skipMemoryCacheAtPaths: ArrayList<String>? = null,
     onError: (() -> Unit)? = null
 ) {
-    target.isHorizontalScrolling = horizontalScroll
+    (target as? MySquareImageView)?.isHorizontalScrolling = horizontalScroll
     if (type == TYPE_SVGS) {
         loadSVG(
             path = path,
@@ -673,7 +675,7 @@ fun Context.getPathLocation(path: String): Int {
 @SuppressLint("CheckResult")
 fun Context.loadImageBase(
     path: String,
-    target: MySquareImageView,
+    target: ImageView,
     cropThumbnails: Boolean,
     roundCorners: Int,
     signature: ObjectKey,
@@ -716,7 +718,15 @@ fun Context.loadImageBase(
             if (roundCorners == ROUNDED_CORNERS_SMALL) org.fossify.commons.R.dimen.rounded_corner_radius_small else org.fossify.commons.R.dimen.rounded_corner_radius_big
         val cornerRadius = resources.getDimension(cornerSize).toInt()
         val roundedCornersTransform = RoundedCorners(cornerRadius)
-        options.optionalTransform(MultiTransformation(CenterCrop(), roundedCornersTransform))
+        // Rounded corners must not implicitly crop thumbnails. CenterCrop is
+        // applied only when the user has enabled thumbnail cropping.
+        options.optionalTransform(
+            if (cropThumbnails) {
+                MultiTransformation(CenterCrop(), roundedCornersTransform)
+            } else {
+                roundedCornersTransform
+            }
+        )
         options.optionalTransform(
             WebpDrawable::class.java,
             MultiTransformation(
@@ -796,7 +806,7 @@ fun Context.loadImageBase(
 
 fun Context.loadSVG(
     path: String,
-    target: MySquareImageView,
+    target: ImageView,
     cropThumbnails: Boolean,
     roundCorners: Int,
     signature: ObjectKey,
@@ -823,7 +833,11 @@ fun Context.loadSVG(
         }
 
         val cornerRadius = resources.getDimension(cornerSize).toInt()
-        builder = builder.transform(CenterCrop(), RoundedCorners(cornerRadius))
+        builder = if (cropThumbnails) {
+            builder.transform(CenterCrop(), RoundedCorners(cornerRadius))
+        } else {
+            builder.transform(RoundedCorners(cornerRadius))
+        }
     }
 
     builder.into(target)
@@ -832,7 +846,7 @@ fun Context.loadSVG(
 // intended mostly for Android 11 issues, that fail loading PNG files bigger than 10 MB
 fun Context.tryLoadingWithPicasso(
     path: String,
-    view: MySquareImageView,
+    view: ImageView,
     cropThumbnails: Boolean,
     roundCorners: Int,
     signature: ObjectKey
@@ -1016,6 +1030,12 @@ fun Context.getCachedMedia(
 
         val pathToUse = path.ifEmpty { SHOW_ALL }
         mediaFetcher.sortMedia(media, config.getFolderSorting(pathToUse))
+        if (
+            !config.cropThumbnails && !config.scrollHorizontally &&
+            config.getFolderViewType(pathToUse) == VIEW_TYPE_GRID
+        ) {
+            ThumbnailAspectRatio.prime(this, media)
+        }
         val grouped = mediaFetcher.groupMedia(media, pathToUse)
         callback(grouped.clone() as ArrayList<ThumbnailItem>)
         val OTGPath = config.OTGPath

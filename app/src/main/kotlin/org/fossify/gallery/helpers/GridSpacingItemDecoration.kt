@@ -3,6 +3,7 @@ package org.fossify.gallery.helpers
 import android.graphics.Rect
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import org.fossify.gallery.models.Medium
 import org.fossify.gallery.models.ThumbnailItem
 
@@ -20,6 +21,13 @@ class GridSpacingItemDecoration(
         }
 
         val position = parent.getChildAdapterPosition(view)
+        if (parent.layoutManager is StaggeredGridLayoutManager && !isScrollingHorizontally) {
+            if (items.getOrNull(position) !is Medium) {
+                outRect.top = spacing / 2
+                outRect.bottom = spacing / 2
+            }
+            return
+        }
         val medium = items.getOrNull(position) as? Medium ?: return
         val gridPositionToUse = if (useGridPosition) medium.gridPosition else position
         val column = gridPositionToUse % spanCount

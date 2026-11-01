@@ -11,6 +11,7 @@ import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.view.allViews
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.bumptech.glide.Glide
 import com.qtalk.recyclerviewfastscroller.RecyclerViewFastScroller
 import org.fossify.commons.activities.BaseSimpleActivity
@@ -83,6 +84,7 @@ import org.fossify.gallery.helpers.RECYCLE_BIN
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_BIG
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_NONE
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_SMALL
+import org.fossify.gallery.helpers.ThumbnailAspectRatio
 import org.fossify.gallery.helpers.SHOW_ALL
 import org.fossify.gallery.helpers.SHOW_FAVORITES
 import org.fossify.gallery.helpers.SHOW_RECYCLE_BIN
@@ -92,6 +94,7 @@ import org.fossify.gallery.interfaces.MediaOperationsListener
 import org.fossify.gallery.models.Medium
 import org.fossify.gallery.models.ThumbnailItem
 import org.fossify.gallery.models.ThumbnailSection
+import kotlin.math.roundToInt
 
 class MediaAdapter(
     activity: BaseSimpleActivity,
@@ -164,6 +167,14 @@ class MediaAdapter(
             }
         }
         bindViewHolder(holder)
+    }
+
+    override fun onViewAttachedToWindow(holder: MyRecyclerViewAdapter.ViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        val position = holder.bindingAdapterPosition
+        val section = media.getOrNull(position) is ThumbnailSection
+        val params = holder.itemView.layoutParams as? StaggeredGridLayoutManager.LayoutParams
+        params?.isFullSpan = section
     }
 
     override fun getItemCount() = media.size
@@ -658,13 +669,51 @@ class MediaAdapter(
     private fun setupThumbnail(view: View, medium: Medium) {
         val isSelected = selectedKeys.contains(medium.path.hashCode())
         bindItem(view, medium).apply {
-            val padding = if (config.thumbnailSpacing <= 1) {
+            val useAspectGrid = !isListViewType && !cropThumbnails && !scrollHorizontally
+            val holderParams = mediaItemHolder.layoutParams
+            if (useAspectGrid) {
+                val columns = config.mediaColumnCnt.coerceAtLeast(1)
+                val availableWidth = recyclerView.width - recyclerView.paddingLeft - recyclerView.paddingRight
+                val spacingPx = (config.thumbnailSpacing * root.resources.displayMetrics.density).roundToInt()
+                val itemWidth = (availableWidth / columns - spacingPx).coerceAtLeast(1)
+                val cachedRatio = ThumbnailAspectRatio.get(medium.path)
+                val ratio = cachedRatio ?: 1f
+                holderParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+                holderParams.height = (itemWidth / ratio.coerceIn(0.25f, 4f)).toInt().coerceAtLeast(1) + spacingPx
+                if (cachedRatio == null) {
+                    ThumbnailAspectRatio.load(medium.path, medium.isVideo()) {
+                        if (!isListViewType && !cropThumbnails && !scrollHorizontally) {
+                            val currentPosition = media.indexOfFirst { it is Medium && it.path == medium.path }
+                            if (currentPosition >= 0) notifyItemChanged(currentPosition)
+                        }
+                    }
+                }
+            } else if (!isListViewType) {
+                val columns = config.mediaColumnCnt.coerceAtLeast(1)
+                val availableCrossAxis = if (scrollHorizontally) {
+                    recyclerView.height - recyclerView.paddingTop - recyclerView.paddingBottom
+                } else {
+                    recyclerView.width - recyclerView.paddingLeft - recyclerView.paddingRight
+                }
+                val itemSide = (availableCrossAxis / columns).coerceAtLeast(1)
+                holderParams.width = if (scrollHorizontally) itemSide else ViewGroup.LayoutParams.MATCH_PARENT
+                holderParams.height = itemSide
+            }
+            mediaItemHolder.layoutParams = holderParams
+            val padding = if (config.thumbnailSpacing <= 1 && !useAspectGrid) {
                 config.thumbnailSpacing
             } else {
                 0
             }
 
-            mediaItemHolder.setPadding(padding, padding, padding, padding)
+            if (useAspectGrid) {
+                val spacingPx = (config.thumbnailSpacing * root.resources.displayMetrics.density).roundToInt().coerceAtLeast(0)
+                val leadingPadding = spacingPx / 2
+                val trailingPadding = spacingPx - leadingPadding
+                mediaItemHolder.setPadding(leadingPadding, leadingPadding, trailingPadding, trailingPadding)
+            } else {
+                mediaItemHolder.setPadding(padding, padding, padding, padding)
+            }
 
             favorite.beVisibleIf(medium.isFavorite && config.markFavoriteItems)
 
@@ -744,7 +793,7 @@ class MediaAdapter(
                 target = mediumThumbnail,
                 horizontalScroll = scrollHorizontally,
                 animateGifs = animateGifs,
-                cropThumbnails = cropThumbnails,
+                cropThumbnails = isListViewType || cropThumbnails,
                 roundCorners = roundedCorners,
                 signature = medium.getKey(),
                 skipMemoryCacheAtPaths = rotatedImagePaths,

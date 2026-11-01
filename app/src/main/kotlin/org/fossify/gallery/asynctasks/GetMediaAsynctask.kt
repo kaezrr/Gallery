@@ -6,6 +6,7 @@ import org.fossify.commons.helpers.FAVORITES
 import org.fossify.commons.helpers.SORT_BY_DATE_MODIFIED
 import org.fossify.commons.helpers.SORT_BY_DATE_TAKEN
 import org.fossify.commons.helpers.SORT_BY_SIZE
+import org.fossify.commons.helpers.VIEW_TYPE_GRID
 import org.fossify.gallery.extensions.config
 import org.fossify.gallery.extensions.getFavoritePaths
 import org.fossify.gallery.helpers.*
@@ -55,6 +56,13 @@ class GetMediaAsynctask(
                 mPath, isPickImage, isPickVideo, getProperDateTaken, getProperLastModified, getProperFileSize, favoritePaths,
                 getVideoDurations, lastModifieds, dateTakens, null
             )
+        }
+
+        if (
+            !context.config.cropThumbnails && !context.config.scrollHorizontally &&
+            context.config.getFolderViewType(pathToUse) == VIEW_TYPE_GRID
+        ) {
+            ThumbnailAspectRatio.prime(context, media)
         }
 
         return mediaFetcher.groupMedia(media, pathToUse)
