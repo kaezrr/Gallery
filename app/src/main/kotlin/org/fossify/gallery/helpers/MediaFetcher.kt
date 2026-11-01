@@ -18,6 +18,7 @@ import org.fossify.gallery.extensions.*
 import org.fossify.gallery.models.Medium
 import org.fossify.gallery.models.ThumbnailItem
 import org.fossify.gallery.models.ThumbnailSection
+import org.fossify.gallery.video.getMedia3VideoDurationSeconds
 import java.io.File
 import java.util.Calendar
 import java.util.Locale
@@ -47,7 +48,7 @@ class MediaFetcher(val context: Context) {
                 if (android11Files?.containsKey(curPath.lowercase(Locale.getDefault())) == true) {
                     curMedia.addAll(android11Files[curPath.lowercase(Locale.getDefault())]!!)
                 } else if (android11Files == null) {
-                    val files = getAndroid11FolderMedia(isPickImage, isPickVideo, favoritePaths, false, getProperDateTaken, dateTakens)
+                    val files = getAndroid11FolderMedia(isPickImage, isPickVideo, favoritePaths, false, getProperDateTaken, dateTakens, getVideoDurations)
                     if (files.containsKey(curPath.lowercase(Locale.getDefault()))) {
                         curMedia.addAll(files[curPath.lowercase(Locale.getDefault())]!!)
                     }
@@ -62,7 +63,7 @@ class MediaFetcher(val context: Context) {
 
                 if (curPath == FAVORITES && isRPlus() && !isExternalStorageManager()) {
                     val files =
-                        getAndroid11FolderMedia(isPickImage, isPickVideo, favoritePaths, true, getProperDateTaken, dateTakens.clone() as HashMap<String, Long>)
+                        getAndroid11FolderMedia(isPickImage, isPickVideo, favoritePaths, true, getProperDateTaken, dateTakens.clone() as HashMap<String, Long>, getVideoDurations)
                     newMedia.forEach { newMedium ->
                         for ((folder, media) in files) {
                             media.forEach { medium ->
@@ -393,7 +394,7 @@ class MediaFetcher(val context: Context) {
                 lastModified = newLastModified
 
                 var dateTaken = lastModified
-                val videoDuration = if (getVideoDurations && isVideo) context.getDuration(path) ?: 0 else 0
+                val videoDuration = if (getVideoDurations && isVideo) getVideoDuration(path) else 0
 
                 if (getProperDateTaken) {
                     var newDateTaken = dateTakens.remove(path)
@@ -431,7 +432,8 @@ class MediaFetcher(val context: Context) {
         favoritePaths: ArrayList<String>,
         getFavoritePathsOnly: Boolean,
         getProperDateTaken: Boolean,
-        dateTakens: HashMap<String, Long>
+        dateTakens: HashMap<String, Long>,
+        getVideoDurations: Boolean = context.config.showThumbnailVideoDuration
     ): HashMap<String, ArrayList<Medium>> {
         val media = HashMap<String, ArrayList<Medium>>()
         if (!isRPlus() || Environment.isExternalStorageManager()) {
@@ -520,7 +522,14 @@ class MediaFetcher(val context: Context) {
                     dateTaken = lastModified
                 }
 
-                val videoDuration = Math.round(cursor.getIntValue(MediaStore.MediaColumns.DURATION) / 1000.toDouble()).toInt()
+                val mediaStoreDuration = cursor.getLongValue(MediaStore.MediaColumns.DURATION)
+                val videoDuration = if (!getVideoDurations || !isVideo) {
+                    0
+                } else if (mediaStoreDuration > 0L) {
+                    Math.round(mediaStoreDuration / 1000.0).toInt()
+                } else {
+                    getVideoDuration(path)
+                }
                 val isFavorite = favoritePaths.contains(path)
                 val medium =
                     Medium(null, filename, path, path.getParentPath(), lastModified, dateTaken, size, type, videoDuration, isFavorite, 0L, mediaStoreId)
@@ -536,6 +545,17 @@ class MediaFetcher(val context: Context) {
         }
 
         return media
+    }
+
+    private fun getVideoDuration(path: String): Int {
+        val platformDuration = context.getDuration(path) ?: 0
+        if (platformDuration > 0) return platformDuration
+
+        return try {
+            context.getMedia3VideoDurationSeconds(path)
+        } catch (_: Exception) {
+            0
+        }
     }
 
     private fun getMediaOnOTG(
@@ -599,7 +619,7 @@ class MediaFetcher(val context: Context) {
             val path = Uri.decode(
                 file.uri.toString().replaceFirst("${context.config.OTGTreeUri}/document/${context.config.OTGPartition}%3A", "${context.config.OTGPath}/")
             )
-            val videoDuration = if (getVideoDurations) context.getDuration(path) ?: 0 else 0
+            val videoDuration = if (getVideoDurations && isVideo) getVideoDuration(path) else 0
             val isFavorite = favoritePaths.contains(path)
             val medium = Medium(null, filename, path, folder, dateModified, dateTaken, size, type, videoDuration, isFavorite, 0L, 0L)
             media.add(medium)
