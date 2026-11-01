@@ -85,6 +85,7 @@ import org.fossify.gallery.helpers.ROUNDED_CORNERS_BIG
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_NONE
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_SMALL
 import org.fossify.gallery.helpers.ThumbnailAspectRatio
+import org.fossify.gallery.helpers.VideoThumbnailPlaybackCoordinator
 import org.fossify.gallery.helpers.SHOW_ALL
 import org.fossify.gallery.helpers.SHOW_FAVORITES
 import org.fossify.gallery.helpers.SHOW_RECYCLE_BIN
@@ -124,6 +125,7 @@ class MediaAdapter(
     private var cropThumbnails = config.cropThumbnails
     private var displayFilenames = config.displayFileNames
     private var showFileTypes = config.showThumbnailFileTypes
+    var videoThumbnailPlaybackCoordinator: VideoThumbnailPlaybackCoordinator? = null
 
     var sorting = config.getFolderSorting(if (config.showAll) SHOW_ALL else path)
     var dateFormat = config.dateFormat
@@ -175,6 +177,12 @@ class MediaAdapter(
         val section = media.getOrNull(position) is ThumbnailSection
         val params = holder.itemView.layoutParams as? StaggeredGridLayoutManager.LayoutParams
         params?.isFullSpan = section
+        videoThumbnailPlaybackCoordinator?.onGridCellAttached()
+    }
+
+    override fun onViewDetachedFromWindow(holder: MyRecyclerViewAdapter.ViewHolder) {
+        videoThumbnailPlaybackCoordinator?.onGridCellDetached(holder.itemView)
+        super.onViewDetachedFromWindow(holder)
     }
 
     override fun getItemCount() = media.size
@@ -260,6 +268,7 @@ class MediaAdapter(
 
     override fun onViewRecycled(holder: ViewHolder) {
         super.onViewRecycled(holder)
+        videoThumbnailPlaybackCoordinator?.onGridCellDetached(holder.itemView)
         if (!activity.isDestroyed) {
             val itemView = holder.itemView
             val tmb = itemView.allViews.firstOrNull { it.id == R.id.medium_thumbnail }
@@ -643,6 +652,7 @@ class MediaAdapter(
             media = thumbnailItems
             notifyDataSetChanged()
             finishActMode()
+            videoThumbnailPlaybackCoordinator?.scheduleReconcile()
         }
     }
 
@@ -667,6 +677,7 @@ class MediaAdapter(
     }
 
     private fun setupThumbnail(view: View, medium: Medium) {
+        videoThumbnailPlaybackCoordinator?.onGridCellBound(view, medium.path, medium.isVideo())
         val isSelected = selectedKeys.contains(medium.path.hashCode())
         bindItem(view, medium).apply {
             val useAspectGrid = !isListViewType && !cropThumbnails && !scrollHorizontally

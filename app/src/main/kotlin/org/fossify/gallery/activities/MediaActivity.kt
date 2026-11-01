@@ -92,6 +92,7 @@ import org.fossify.gallery.helpers.GET_ANY_INTENT
 import org.fossify.gallery.helpers.GET_IMAGE_INTENT
 import org.fossify.gallery.helpers.GET_VIDEO_INTENT
 import org.fossify.gallery.helpers.GridSpacingItemDecoration
+import org.fossify.gallery.helpers.VideoThumbnailPlaybackCoordinator
 import org.fossify.gallery.helpers.IS_IN_RECYCLE_BIN
 import org.fossify.gallery.helpers.MAX_COLUMN_COUNT
 import org.fossify.gallery.helpers.MediaFetcher
@@ -124,6 +125,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     private var mIsGetImageIntent = false
     private var mIsGetVideoIntent = false
     private var mIsGetAnyIntent = false
+    private var mVideoThumbnailPlaybackCoordinator: VideoThumbnailPlaybackCoordinator? = null
     private var mIsGettingMedia = false
     private var mAllowPickingMultiple = false
     private var mShowAll = false
@@ -200,6 +202,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
 
     override fun onResume() {
         super.onResume()
+        mVideoThumbnailPlaybackCoordinator?.onHostResumed()
         updateMenuColors()
         if (mStoredAnimateGifs != config.animateGifs) {
             getMediaAdapter()?.updateAnimateGifs(config.animateGifs)
@@ -273,6 +276,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     }
 
     override fun onPause() {
+        mVideoThumbnailPlaybackCoordinator?.onHostPaused()
         super.onPause()
         mIsGettingMedia = false
         binding.mediaRefreshLayout.isRefreshing = false
@@ -299,6 +303,8 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
     }
 
     override fun onDestroy() {
+        mVideoThumbnailPlaybackCoordinator?.release()
+        mVideoThumbnailPlaybackCoordinator = null
         super.onDestroy()
         if (config.showAll && !isChangingConfigurations) {
             config.temporarilyShowHidden = false
@@ -523,6 +529,20 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             }.apply {
                 setupZoomListener(mZoomListener)
                 binding.mediaGrid.adapter = this
+                mVideoThumbnailPlaybackCoordinator?.release()
+                mVideoThumbnailPlaybackCoordinator = VideoThumbnailPlaybackCoordinator(
+                    context = this@MediaActivity,
+                    recyclerView = binding.mediaGrid,
+                    adapter = this,
+                    isPlaybackEnabled = {
+                        config.autoplayVideos
+                            && !mIsGetImageIntent && !mIsGetVideoIntent && !mIsGetAnyIntent
+                            && config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath) == VIEW_TYPE_GRID
+                            && !config.scrollHorizontally
+                            && config.mediaColumnCnt <= 4
+                    },
+                    shouldCropVideo = { config.cropThumbnails }
+                ).also { this.videoThumbnailPlaybackCoordinator = it }
             }
 
             val viewType = config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath)
@@ -954,6 +974,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         getMediaAdapter()?.apply {
             notifyItemRangeChanged(0, media.size)
         }
+        mVideoThumbnailPlaybackCoordinator?.scheduleReconcile()
     }
 
     private fun currentMediaColumnCount() = when (val layoutManager = binding.mediaGrid.layoutManager) {
