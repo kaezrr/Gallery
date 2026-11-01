@@ -114,6 +114,7 @@ import org.fossify.gallery.models.Favorite
 import org.fossify.gallery.models.Medium
 import org.fossify.gallery.models.ThumbnailItem
 import org.fossify.gallery.svg.SvgSoftwareLayerSetter
+import org.fossify.gallery.video.Media3VideoFrame
 import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -726,11 +727,40 @@ fun Context.loadImageBase(
     }
 
     WebpBitmapFactory.sUseSystemDecoder = false // CVE-2023-4863
-    var builder = Glide.with(applicationContext)
+    val requestManager = Glide.with(applicationContext)
+    var builder = requestManager
         .load(path)
         .apply(options)
         .set(WebpDownsampler.USE_SYSTEM_DECODER, false) // CVE-2023-4863
         .transition(getOptionalCrossFadeTransition(crossFadeDuration))
+
+    val isVideo = path.isVideoFast()
+    if (isVideo) {
+        val media3Fallback = requestManager
+            .load(Media3VideoFrame(path))
+            .apply(options)
+            .transition(getOptionalCrossFadeTransition(crossFadeDuration))
+            .listener(object : RequestListener<Drawable> {
+                override fun onLoadFailed(
+                    e: GlideException?,
+                    model: Any?,
+                    targetBitmap: Target<Drawable>,
+                    isFirstResource: Boolean
+                ): Boolean {
+                    onError?.invoke()
+                    return true
+                }
+
+                override fun onResourceReady(
+                    resource: Drawable,
+                    model: Any,
+                    targetBitmap: Target<Drawable>,
+                    dataSource: DataSource,
+                    isFirstResource: Boolean
+                ) = false
+            })
+        builder = builder.error(media3Fallback)
+    }
 
     builder = builder.listener(object : RequestListener<Drawable> {
         override fun onLoadFailed(
@@ -739,6 +769,10 @@ fun Context.loadImageBase(
             targetBitmap: Target<Drawable>,
             isFirstResource: Boolean
         ): Boolean {
+            if (isVideo) {
+                return false
+            }
+
             if (tryLoadingWithPicasso) {
                 tryLoadingWithPicasso(path, target, cropThumbnails, roundCorners, signature)
             } else {
