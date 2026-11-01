@@ -10,7 +10,10 @@ import android.provider.MediaStore.Files
 import android.provider.MediaStore.Images
 import android.util.LruCache
 import androidx.exifinterface.media.ExifInterface
+import com.caverock.androidsvg.SVG
+import org.fossify.commons.extensions.isSvg
 import org.fossify.gallery.models.Medium
+import org.fossify.gallery.video.toMediaUri
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
@@ -85,11 +88,11 @@ object ThumbnailAspectRatio {
         synchronized(cache) { cache.put(path, displayWidth.toFloat() / displayHeight) }
     }
 
-    fun load(path: String, isVideo: Boolean, onLoaded: (Float) -> Unit) {
+    fun load(context: Context, path: String, isVideo: Boolean, onLoaded: (Float) -> Unit) {
         if (get(path) != null || !pending.add(path)) return
         try {
             executor.execute {
-                val ratio = readRatio(path, isVideo)
+                val ratio = readRatio(context.applicationContext, path, isVideo)
                 synchronized(cache) { cache.put(path, ratio) }
                 pending.remove(path)
                 mainHandler.post { onLoaded(ratio) }
@@ -100,9 +103,15 @@ object ThumbnailAspectRatio {
         }
     }
 
-    private fun readRatio(path: String, isVideo: Boolean): Float {
+    private fun readRatio(context: Context, path: String, isVideo: Boolean): Float {
         return try {
-            val dimensions = if (isVideo) readVideoDimensions(path) else readImageDimensions(path)
+            val dimensions = if (isVideo) {
+                readVideoDimensions(context, path)
+            } else if (path.isSvg()) {
+                readSvgDimensions(context, path)
+            } else {
+                readImageDimensions(context, path)
+            }
             if (dimensions.first > 0 && dimensions.second > 0) {
                 dimensions.first.toFloat() / dimensions.second
             } else {
@@ -113,16 +122,28 @@ object ThumbnailAspectRatio {
         }
     }
 
-    private fun readImageDimensions(path: String): Pair<Int, Int> {
+    private fun readImageDimensions(context: Context, path: String): Pair<Int, Int> {
+        val uri = context.toMediaUri(path)
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, options)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            BitmapFactory.decodeStream(input, null, options)
+        }
         var width = options.outWidth
         var height = options.outHeight
+        var orientation = ExifInterface.ORIENTATION_NORMAL
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val exif = ExifInterface(input)
+                orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                if (width <= 0 || height <= 0) {
+                    width = exif.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0)
+                    height = exif.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0)
+                }
+            }
+        } catch (_: Exception) {
+            // Some formats do not contain EXIF metadata.
+        }
         if (width > 0 && height > 0) {
-            val orientation = ExifInterface(path).getAttributeInt(
-                ExifInterface.TAG_ORIENTATION,
-                ExifInterface.ORIENTATION_NORMAL
-            )
             if (orientation in setOf(
                     ExifInterface.ORIENTATION_ROTATE_90,
                     ExifInterface.ORIENTATION_ROTATE_270,
@@ -138,10 +159,27 @@ object ThumbnailAspectRatio {
         return width to height
     }
 
-    private fun readVideoDimensions(path: String): Pair<Int, Int> {
+    private fun readSvgDimensions(context: Context, path: String): Pair<Int, Int> {
+        val svg = context.contentResolver.openInputStream(context.toMediaUri(path))?.use { input ->
+            SVG.getFromInputStream(input)
+        }
+            ?: return 0 to 0
+        val width = svg.documentWidth.toInt()
+        val height = svg.documentHeight.toInt()
+        if (width > 0 && height > 0) return width to height
+
+        val viewBox = svg.documentViewBox
+        return if (viewBox != null && viewBox.width() > 0f && viewBox.height() > 0f) {
+            viewBox.width().toInt() to viewBox.height().toInt()
+        } else {
+            0 to 0
+        }
+    }
+
+    private fun readVideoDimensions(context: Context, path: String): Pair<Int, Int> {
         val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(path)
+            retriever.setDataSource(context, context.toMediaUri(path))
             val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
             val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
             val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0

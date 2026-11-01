@@ -65,6 +65,7 @@ import org.fossify.gallery.extensions.handleMediaManagementPrompt
 import org.fossify.gallery.extensions.launchResizeImageDialog
 import org.fossify.gallery.extensions.launchResizeMultipleImagesDialog
 import org.fossify.gallery.extensions.loadImage
+import org.fossify.gallery.extensions.mediaDB
 import org.fossify.gallery.extensions.openEditor
 import org.fossify.gallery.extensions.openPath
 import org.fossify.gallery.extensions.rescanFolderMedia
@@ -86,6 +87,7 @@ import org.fossify.gallery.helpers.ROUNDED_CORNERS_NONE
 import org.fossify.gallery.helpers.ROUNDED_CORNERS_SMALL
 import org.fossify.gallery.helpers.ThumbnailAspectRatio
 import org.fossify.gallery.helpers.VideoThumbnailPlaybackCoordinator
+import org.fossify.gallery.video.VideoDurationResolver
 import org.fossify.gallery.helpers.SHOW_ALL
 import org.fossify.gallery.helpers.SHOW_FAVORITES
 import org.fossify.gallery.helpers.SHOW_RECYCLE_BIN
@@ -671,6 +673,10 @@ class MediaAdapter(
         notifyDataSetChanged()
     }
 
+    fun refreshGridItemDimensions() {
+        if (!isListViewType) notifyDataSetChanged()
+    }
+
     fun updateShowFileTypes(showFileTypes: Boolean) {
         this.showFileTypes = showFileTypes
         notifyDataSetChanged()
@@ -692,7 +698,7 @@ class MediaAdapter(
                 holderParams.width = ViewGroup.LayoutParams.MATCH_PARENT
                 holderParams.height = (itemWidth / ratio.coerceIn(0.25f, 4f)).toInt().coerceAtLeast(1) + spacingPx
                 if (cachedRatio == null) {
-                    ThumbnailAspectRatio.load(medium.path, medium.isVideo()) {
+                    ThumbnailAspectRatio.load(root.context, medium.path, medium.isVideo()) {
                         if (!isListViewType && !cropThumbnails && !scrollHorizontally) {
                             val currentPosition = media.indexOfFirst { it is Medium && it.path == medium.path }
                             if (currentPosition >= 0) notifyItemChanged(currentPosition)
@@ -762,6 +768,21 @@ class MediaAdapter(
 
             val showVideoDuration = medium.isVideo() && config.showThumbnailVideoDuration
             if (showVideoDuration) {
+                val cachedDuration = VideoDurationResolver.get(medium.path)
+                if (medium.videoDuration <= 0 && cachedDuration != null) {
+                    medium.videoDuration = cachedDuration
+                } else if (medium.videoDuration <= 0) {
+                    VideoDurationResolver.load(activity, medium.path) { duration ->
+                        medium.videoDuration = duration
+                        if (duration > 0) {
+                            ensureBackgroundThread {
+                                activity.mediaDB.updateVideoDuration(medium.path, duration)
+                            }
+                        }
+                        val currentPosition = media.indexOfFirst { it is Medium && it.path == medium.path }
+                        if (currentPosition >= 0) notifyItemChanged(currentPosition)
+                    }
+                }
                 videoDuration?.text = medium.videoDuration.getFormattedDuration()
             }
             videoDuration?.beVisibleIf(showVideoDuration)

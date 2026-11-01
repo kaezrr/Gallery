@@ -21,6 +21,14 @@ class MediaFastScrollerHost(context: Context, attrs: AttributeSet?) : FrameLayou
         recyclerView = findViewById(R.id.media_grid)
     }
 
+    override fun canScrollVertically(direction: Int): Boolean {
+        return if (::recyclerView.isInitialized) {
+            recyclerView.canScrollVertically(direction)
+        } else {
+            super.canScrollVertically(direction)
+        }
+    }
+
     fun setStaggeredGridActive(active: Boolean) {
         if (active) {
             unwrapFastScroller()

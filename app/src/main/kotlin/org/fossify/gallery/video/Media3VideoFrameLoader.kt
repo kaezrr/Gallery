@@ -2,7 +2,6 @@ package org.fossify.gallery.video
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Presentation
@@ -15,7 +14,6 @@ import com.bumptech.glide.load.model.ModelLoader
 import com.bumptech.glide.load.model.ModelLoaderFactory
 import com.bumptech.glide.load.model.MultiModelLoaderFactory
 import com.bumptech.glide.signature.ObjectKey
-import java.io.File
 import java.util.concurrent.ExecutionException
 import kotlin.math.min
 
@@ -78,11 +76,7 @@ private class Media3VideoFrameFetcher(
 
         var extractor: FrameExtractor? = null
         try {
-            val sourceUri = Uri.parse(path).let { uri ->
-                if (uri.scheme == null) Uri.fromFile(File(path)) else uri
-            }
-
-            val frameExtractor = FrameExtractor.Builder(context, MediaItem.fromUri(sourceUri))
+            val frameExtractor = FrameExtractor.Builder(context, MediaItem.fromUri(context.toMediaUri(path)))
                 .setEffects(listOf(Presentation.createForShortSide(frameShortSide)))
                 .build()
             extractor = frameExtractor

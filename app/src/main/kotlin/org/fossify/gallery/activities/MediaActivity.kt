@@ -184,6 +184,15 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             padBottomImeAndSystem = listOf(binding.mediaGrid)
         )
 
+        binding.mediaGrid.addOnLayoutChangeListener { view, left, _, right, _, oldLeft, _, oldRight, _ ->
+            val measuredWidth = right - left
+            if (measuredWidth > 0 && measuredWidth != oldRight - oldLeft) {
+                view.post {
+                    if (view.width == measuredWidth) getMediaAdapter()?.refreshGridItemDimensions()
+                }
+            }
+        }
+
         if (mShowAll) {
             registerFileUpdateListener()
         }

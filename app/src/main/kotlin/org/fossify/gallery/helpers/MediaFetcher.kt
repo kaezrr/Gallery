@@ -18,7 +18,7 @@ import org.fossify.gallery.extensions.*
 import org.fossify.gallery.models.Medium
 import org.fossify.gallery.models.ThumbnailItem
 import org.fossify.gallery.models.ThumbnailSection
-import org.fossify.gallery.video.getMedia3VideoDurationSeconds
+import org.fossify.gallery.video.VideoDurationResolver
 import java.io.File
 import java.util.Calendar
 import java.util.Locale
@@ -528,7 +528,7 @@ class MediaFetcher(val context: Context) {
                 } else if (mediaStoreDuration > 0L) {
                     Math.round(mediaStoreDuration / 1000.0).toInt()
                 } else {
-                    getVideoDuration(path)
+                    VideoDurationResolver.get(path) ?: 0
                 }
                 val isFavorite = favoritePaths.contains(path)
                 val medium =
@@ -548,14 +548,9 @@ class MediaFetcher(val context: Context) {
     }
 
     private fun getVideoDuration(path: String): Int {
+        VideoDurationResolver.get(path)?.let { return it }
         val platformDuration = context.getDuration(path) ?: 0
-        if (platformDuration > 0) return platformDuration
-
-        return try {
-            context.getMedia3VideoDurationSeconds(path)
-        } catch (_: Exception) {
-            0
-        }
+        return platformDuration.coerceAtLeast(0)
     }
 
     private fun getMediaOnOTG(

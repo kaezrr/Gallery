@@ -3,7 +3,8 @@ package org.fossify.gallery.helpers
 import android.content.Context
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
-import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -20,6 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import org.fossify.gallery.R
 import org.fossify.gallery.adapters.MediaAdapter
 import org.fossify.gallery.models.Medium
+import org.fossify.gallery.video.toMediaUri
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -130,7 +132,7 @@ class VideoThumbnailPlaybackCoordinator(
     }
 
     private val appContext = context.applicationContext
-    private val mainHandler = recyclerView.handler
+    private val mainHandler = recyclerView.handler ?: Handler(Looper.getMainLooper())
     private val slots = ArrayList<PlayerSlot>()
     private val failedPaths = HashSet<String>()
     private var nextMediaId = 0L
@@ -142,7 +144,7 @@ class VideoThumbnailPlaybackCoordinator(
             if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                 scheduleReconcile()
             } else {
-                mainHandler?.removeCallbacks(reconcileRunnable)
+                mainHandler.removeCallbacks(reconcileRunnable)
                 slots.forEach { slot ->
                     slot.player?.playWhenReady = false
                 }
@@ -185,15 +187,15 @@ class VideoThumbnailPlaybackCoordinator(
 
     fun scheduleReconcile() {
         if (released) return
-        mainHandler?.removeCallbacks(reconcileRunnable)
+        mainHandler.removeCallbacks(reconcileRunnable)
         if (recyclerView.scrollState == RecyclerView.SCROLL_STATE_IDLE) {
-            mainHandler?.postDelayed(reconcileRunnable, SCROLL_IDLE_DELAY_MS)
+            mainHandler.postDelayed(reconcileRunnable, SCROLL_IDLE_DELAY_MS)
         }
     }
 
     fun onHostPaused() {
         lifecyclePaused = true
-        mainHandler?.removeCallbacks(reconcileRunnable)
+        mainHandler.removeCallbacks(reconcileRunnable)
         slots.forEach { slot ->
             slot.clearAssignment()
         }
@@ -207,7 +209,7 @@ class VideoThumbnailPlaybackCoordinator(
     fun release() {
         if (released) return
         released = true
-        mainHandler?.removeCallbacks(reconcileRunnable)
+        mainHandler.removeCallbacks(reconcileRunnable)
         recyclerView.removeOnScrollListener(scrollListener)
         recyclerView.removeOnChildAttachStateChangeListener(childAttachListener)
         slots.forEach(PlayerSlot::release)
@@ -387,7 +389,7 @@ class VideoThumbnailPlaybackCoordinator(
             player.setMediaItem(
                 MediaItem.Builder()
                     .setMediaId(slot.mediaId!!)
-                    .setUri(cell.path.toMediaUri())
+                    .setUri(appContext.toMediaUri(cell.path))
                     .build()
             )
         }
@@ -476,8 +478,4 @@ class VideoThumbnailPlaybackCoordinator(
         failedPaths.clear()
     }
 
-    private fun String.toMediaUri(): Uri = when {
-        startsWith("content://", true) || startsWith("file://", true) -> Uri.parse(this)
-        else -> Uri.fromFile(java.io.File(this))
-    }
 }
