@@ -6,6 +6,14 @@
 
 Unleash memories, not personal data. Fossify Gallery is the ultimate photo and video app that's as powerful as it is private. No ads, no unnecessary permissions – just a seamless experience tailored for you.
 
+**Fork features:**
+- Circular scrolling in media and search grids.
+- Staggered grids that preserve each photo and video’s aspect ratio.
+- Looping video previews with configurable simultaneous playback limits.
+- A mute-by-default option for video playback.
+- Search bars that collapse and reappear as you scroll.
+- Improved duration detection for short videos with missing metadata.
+
 **🖼️ PHOTO EDITING AT YOUR FINGERTIPS:**  
 Enhance your photos with our basic yet powerful photo editor. Crop, resize, rotate, flip, draw, and apply stunning filters, all without compromising your privacy. Take control of your memories like never before.
 
