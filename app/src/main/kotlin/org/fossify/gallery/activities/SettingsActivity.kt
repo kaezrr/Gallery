@@ -63,6 +63,8 @@ class SettingsActivity : SimpleActivity() {
         setupSearchAllFiles()
         setupShowHiddenItems()
         setupAutoplayVideos()
+        setupVideoAutoplayLimit()
+        setupMuteVideos()
         setupRememberLastVideo()
         setupLoopVideos()
         setupOpenVideosOnSeparateScreen()
@@ -273,6 +275,37 @@ class SettingsActivity : SimpleActivity() {
         binding.settingsAutoplayVideosHolder.setOnClickListener {
             binding.settingsAutoplayVideos.toggle()
             config.autoplayVideos = binding.settingsAutoplayVideos.isChecked
+        }
+    }
+
+    private fun setupVideoAutoplayLimit() {
+        binding.settingsVideoAutoplayLimit.text = getVideoAutoplayLimitText()
+        binding.settingsVideoAutoplayLimitHolder.setOnClickListener {
+            val items = arrayListOf(
+                RadioItem(VIDEO_AUTOPLAY_LIMIT_LOW, getString(R.string.video_autoplay_limit_low)),
+                RadioItem(VIDEO_AUTOPLAY_LIMIT_MEDIUM, getString(R.string.video_autoplay_limit_medium)),
+                RadioItem(VIDEO_AUTOPLAY_LIMIT_HIGH, getString(R.string.video_autoplay_limit_high))
+            )
+            RadioGroupDialog(this, items, config.videoAutoplayLimit) {
+                config.videoAutoplayLimit = it as Int
+                binding.settingsVideoAutoplayLimit.text = getVideoAutoplayLimitText()
+            }
+        }
+    }
+
+    private fun getVideoAutoplayLimitText() = getString(
+        when (config.videoAutoplayLimit) {
+            VIDEO_AUTOPLAY_LIMIT_LOW -> R.string.video_autoplay_limit_low
+            VIDEO_AUTOPLAY_LIMIT_HIGH -> R.string.video_autoplay_limit_high
+            else -> R.string.video_autoplay_limit_medium
+        }
+    )
+
+    private fun setupMuteVideos() {
+        binding.settingsMuteVideos.isChecked = config.muteVideos
+        binding.settingsMuteVideosHolder.setOnClickListener {
+            binding.settingsMuteVideos.toggle()
+            config.muteVideos = binding.settingsMuteVideos.isChecked
         }
     }
 
@@ -917,6 +950,9 @@ class SettingsActivity : SimpleActivity() {
                 put(SHOW_HIDDEN_MEDIA, config.showHiddenMedia)
                 put(FILE_LOADING_PRIORITY, config.fileLoadingPriority)
                 put(AUTOPLAY_VIDEOS, config.autoplayVideos)
+                put(VIDEO_AUTOPLAY_LIMIT, config.videoAutoplayLimit)
+                put(MUTE_VIDEOS, config.muteVideos)
+                put(CIRCULAR_SCROLL, config.circularScroll)
                 put(REMEMBER_LAST_VIDEO_POSITION, config.rememberLastVideoPosition)
                 put(LOOP_VIDEOS, config.loopVideos)
                 put(GESTURE_VIDEO_PLAYER, config.gestureVideoPlayer)
@@ -1063,6 +1099,9 @@ class SettingsActivity : SimpleActivity() {
                 SHOW_HIDDEN_MEDIA -> config.showHiddenMedia = value.toBoolean()
                 FILE_LOADING_PRIORITY -> config.fileLoadingPriority = value.toInt()
                 AUTOPLAY_VIDEOS -> config.autoplayVideos = value.toBoolean()
+                VIDEO_AUTOPLAY_LIMIT -> config.videoAutoplayLimit = value.toInt()
+                MUTE_VIDEOS -> config.muteVideos = value.toBoolean()
+                CIRCULAR_SCROLL -> config.circularScroll = value.toBoolean()
                 REMEMBER_LAST_VIDEO_POSITION -> config.rememberLastVideoPosition = value.toBoolean()
                 LOOP_VIDEOS -> config.loopVideos = value.toBoolean()
                 GESTURE_VIDEO_PLAYER -> config.gestureVideoPlayer = value.toBoolean()

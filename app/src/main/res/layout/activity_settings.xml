@@ -253,6 +253,44 @@
             </RelativeLayout>
 
             <RelativeLayout
+                android:id="@+id/settings_video_autoplay_limit_holder"
+                style="@style/SettingsHolderTextViewStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_video_autoplay_limit_label"
+                    style="@style/SettingsTextLabelStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/video_autoplay_limit" />
+
+                <org.fossify.commons.views.MyTextView
+                    android:id="@+id/settings_video_autoplay_limit"
+                    style="@style/SettingsTextValueStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@id/settings_video_autoplay_limit_label"
+                    tools:text="Medium (4)" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
+                android:id="@+id/settings_mute_videos_holder"
+                style="@style/SettingsHolderSwitchStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <org.fossify.commons.views.MyMaterialSwitch
+                    android:id="@+id/settings_mute_videos"
+                    style="@style/SettingsSwitchStyle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/mute_videos_by_default" />
+
+            </RelativeLayout>
+
+            <RelativeLayout
                 android:id="@+id/settings_remember_last_video_position_holder"
                 style="@style/SettingsHolderSwitchStyle"
                 android:layout_width="match_parent"

@@ -9,11 +9,11 @@ import org.fossify.gallery.models.ThumbnailItem
 
 class GridSpacingItemDecoration(
     val spanCount: Int, val spacing: Int, val isScrollingHorizontally: Boolean, val addSideSpacing: Boolean,
-    var items: ArrayList<ThumbnailItem>, val useGridPosition: Boolean
+    var items: ArrayList<ThumbnailItem>, val useGridPosition: Boolean, val isCircularScrolling: Boolean = false
 ) : RecyclerView.ItemDecoration() {
 
     override fun toString() = "spanCount: $spanCount, spacing: $spacing, isScrollingHorizontally: $isScrollingHorizontally, addSideSpacing: $addSideSpacing, " +
-        "items: ${items.hashCode()}, useGridPosition: $useGridPosition"
+        "items: ${items.hashCode()}, useGridPosition: $useGridPosition, isCircularScrolling: $isCircularScrolling"
 
     override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
         if (spacing <= 1) {
@@ -21,14 +21,15 @@ class GridSpacingItemDecoration(
         }
 
         val position = parent.getChildAdapterPosition(view)
+        val mediaPosition = if (isCircularScrolling && items.isNotEmpty()) position % items.size else position
         if (parent.layoutManager is StaggeredGridLayoutManager && !isScrollingHorizontally) {
-            if (items.getOrNull(position) !is Medium) {
+            if (items.getOrNull(mediaPosition) !is Medium) {
                 outRect.top = spacing / 2
                 outRect.bottom = spacing / 2
             }
             return
         }
-        val medium = items.getOrNull(position) as? Medium ?: return
+        val medium = items.getOrNull(mediaPosition) as? Medium ?: return
         val gridPositionToUse = if (useGridPosition) medium.gridPosition else position
         val column = gridPositionToUse % spanCount
 
@@ -38,13 +39,13 @@ class GridSpacingItemDecoration(
                 outRect.bottom = (column + 1) * spacing / spanCount
                 outRect.right = spacing
 
-                if (position < spanCount) {
+                if (mediaPosition < spanCount) {
                     outRect.left = spacing
                 }
             } else {
                 outRect.top = column * spacing / spanCount
                 outRect.bottom = spacing - (column + 1) * spacing / spanCount
-                if (position >= spanCount) {
+                if (mediaPosition >= spanCount) {
                     outRect.left = spacing
                 }
             }
@@ -54,7 +55,7 @@ class GridSpacingItemDecoration(
                 outRect.right = (column + 1) * spacing / spanCount
                 outRect.bottom = spacing
 
-                if (position < spanCount && !useGridPosition) {
+                if (mediaPosition < spanCount && !useGridPosition) {
                     outRect.top = spacing
                 }
             } else {

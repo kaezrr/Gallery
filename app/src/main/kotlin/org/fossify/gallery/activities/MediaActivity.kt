@@ -216,6 +216,8 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         if (mStoredAnimateGifs != config.animateGifs) {
             getMediaAdapter()?.updateAnimateGifs(config.animateGifs)
         }
+        getMediaAdapter()?.updateCircularScrolling(isCircularGridActive())
+        handleGridSpacing()
 
         if (mStoredCropThumbnails != config.cropThumbnails) {
             setupLayoutManager()
@@ -256,7 +258,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         refreshMenuItems()
 
         binding.mediaFastscroller.updateColors(primaryColor)
-        binding.mediaRefreshLayout.isEnabled = config.enablePullToRefresh
+        binding.mediaRefreshLayout.isEnabled = config.enablePullToRefresh && !isCircularGridActive()
         getMediaAdapter()?.apply {
             dateFormat = config.dateFormat
             timeFormat = getTimeFormat()
@@ -377,6 +379,10 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             val viewType = config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath)
             findItem(R.id.column_count).isVisible = viewType == VIEW_TYPE_GRID
             findItem(R.id.toggle_filename).isVisible = viewType == VIEW_TYPE_GRID
+            findItem(R.id.toggle_circular_scroll).apply {
+                isVisible = viewType == VIEW_TYPE_GRID && !mIsGetImageIntent && !mIsGetVideoIntent && !mIsGetAnyIntent
+                isChecked = config.circularScroll
+            }
         }
     }
 
@@ -388,7 +394,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
         binding.mediaMenu.onSearchTextChangedListener = { text ->
             mLastSearchedText = text
             searchQueryChanged(text)
-            binding.mediaRefreshLayout.isEnabled = text.isEmpty() && config.enablePullToRefresh
+            binding.mediaRefreshLayout.isEnabled = text.isEmpty() && config.enablePullToRefresh && !isCircularGridActive()
         }
 
         binding.mediaMenu.requireToolbar().setOnMenuItemClickListener { menuItem ->
@@ -399,6 +405,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                 R.id.empty_disable_recycle_bin -> emptyAndDisableRecycleBin()
                 R.id.restore_all_files -> restoreAllFiles()
                 R.id.toggle_filename -> toggleFilenameVisibility()
+                R.id.toggle_circular_scroll -> toggleCircularScrolling()
                 R.id.open_camera -> launchCamera()
                 R.id.folder_view -> switchToFolderView()
                 R.id.change_view_type -> changeViewType()
@@ -417,6 +424,18 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
             }
             return@setOnMenuItemClickListener true
         }
+    }
+
+    private fun toggleCircularScrolling() {
+        config.circularScroll = !config.circularScroll
+        if (config.circularScroll) {
+            config.enablePullToRefresh = false
+        }
+        getMediaAdapter()?.updateCircularScrolling(isCircularGridActive())
+        binding.mediaMenu.requireToolbar().menu.findItem(R.id.toggle_circular_scroll).isChecked = config.circularScroll
+        handleGridSpacing()
+        binding.mediaGrid.invalidateItemDecorations()
+        centerCircularScroll()
     }
 
     private fun startSlideshow() {
@@ -515,6 +534,15 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
 
     private fun getMediaAdapter() = binding.mediaGrid.adapter as? MediaAdapter
 
+    private fun isCircularGridActive(): Boolean = config.circularScroll
+        && config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath) == VIEW_TYPE_GRID
+        && !mIsGetImageIntent && !mIsGetVideoIntent && !mIsGetAnyIntent
+
+    private fun centerCircularScroll() {
+        getMediaAdapter()?.centerCircularScroll()
+        binding.mediaRefreshLayout.isEnabled = config.enablePullToRefresh && !isCircularGridActive()
+    }
+
     private fun setupAdapter() {
         if (!mShowAll && isDirEmpty()) {
             return
@@ -530,7 +558,8 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                 isAGetIntent = mIsGetImageIntent || mIsGetVideoIntent || mIsGetAnyIntent,
                 allowMultiplePicks = mAllowPickingMultiple,
                 path = mPath,
-                recyclerView = binding.mediaGrid
+                gridView = binding.mediaGrid,
+                circularScrollEnabled = isCircularGridActive()
             ) {
                 if (it is Medium && !isFinishing) {
                     itemClicked(it.path)
@@ -548,9 +577,9 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                             && !mIsGetImageIntent && !mIsGetVideoIntent && !mIsGetAnyIntent
                             && config.getFolderViewType(if (mShowAll) SHOW_ALL else mPath) == VIEW_TYPE_GRID
                             && !config.scrollHorizontally
-                            && config.mediaColumnCnt <= 4
                     },
-                    shouldCropVideo = { config.cropThumbnails }
+                    shouldCropVideo = { config.cropThumbnails },
+                    maxPlayers = { config.videoAutoplayLimit }
                 ).also { this.videoThumbnailPlaybackCoordinator = it }
             }
 
@@ -561,6 +590,7 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
 
             setupLayoutManager()
             handleGridSpacing()
+            centerCircularScroll()
         } else if (mLastSearchedText.isEmpty()) {
             (currAdapter as MediaAdapter).updateMedia(mMedia)
             handleGridSpacing()
@@ -905,7 +935,8 @@ class MediaActivity : SimpleActivity(), MediaOperationsListener {
                 isScrollingHorizontally = config.scrollHorizontally,
                 addSideSpacing = config.fileRoundedCorners,
                 items = media,
-                useGridPosition = useGridPosition
+                useGridPosition = useGridPosition,
+                isCircularScrolling = getMediaAdapter()?.isCircularScrolling == true
             )
             if (currentGridDecoration.toString() != newGridDecoration.toString()) {
                 if (currentGridDecoration != null) {

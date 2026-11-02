@@ -35,10 +35,10 @@ class VideoThumbnailPlaybackCoordinator(
     private val recyclerView: RecyclerView,
     private val adapter: MediaAdapter,
     private val isPlaybackEnabled: () -> Boolean,
-    private val shouldCropVideo: () -> Boolean
+    private val shouldCropVideo: () -> Boolean,
+    private val maxPlayers: () -> Int
 ) {
     private companion object {
-        const val MAX_PLAYERS = 4
         const val ENTER_VISIBILITY = 0.60f
         const val EXIT_VISIBILITY = 0.35f
         const val VISIBILITY_BUCKET_SIZE = 0.05f
@@ -248,7 +248,8 @@ class VideoThumbnailPlaybackCoordinator(
             cell.visibleFraction >= threshold
         }
 
-        val selected = selectCandidates(candidates, activePaths, MAX_PLAYERS)
+        val playerLimit = maxPlayers().coerceIn(2, 6)
+        val selected = selectCandidates(candidates, activePaths, playerLimit)
         val selectedPaths = selected.mapTo(HashSet()) { it.path }
 
         slots.forEach { slot ->
@@ -256,10 +257,10 @@ class VideoThumbnailPlaybackCoordinator(
                 slot.clearAssignment()
             }
         }
-        trimIdleSlots(MAX_PLAYERS)
+        trimIdleSlots(playerLimit)
 
         selected.forEach { cell ->
-            val slot = slots.firstOrNull { it.path == cell.path } ?: getAvailableSlot(MAX_PLAYERS) ?: return@forEach
+            val slot = slots.firstOrNull { it.path == cell.path } ?: getAvailableSlot(playerLimit) ?: return@forEach
             assign(slot, cell)
         }
     }

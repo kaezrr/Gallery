@@ -165,6 +165,25 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getBoolean(AUTOPLAY_VIDEOS, false)
         set(autoplayVideos) = prefs.edit().putBoolean(AUTOPLAY_VIDEOS, autoplayVideos).apply()
 
+    var videoAutoplayLimit: Int
+        get() = when (prefs.getInt(VIDEO_AUTOPLAY_LIMIT, VIDEO_AUTOPLAY_LIMIT_MEDIUM)) {
+            VIDEO_AUTOPLAY_LIMIT_LOW -> VIDEO_AUTOPLAY_LIMIT_LOW
+            VIDEO_AUTOPLAY_LIMIT_HIGH -> VIDEO_AUTOPLAY_LIMIT_HIGH
+            else -> VIDEO_AUTOPLAY_LIMIT_MEDIUM
+        }
+        set(limit) {
+            val supportedLimit = when (limit) {
+                VIDEO_AUTOPLAY_LIMIT_LOW -> VIDEO_AUTOPLAY_LIMIT_LOW
+                VIDEO_AUTOPLAY_LIMIT_HIGH -> VIDEO_AUTOPLAY_LIMIT_HIGH
+                else -> VIDEO_AUTOPLAY_LIMIT_MEDIUM
+            }
+            prefs.edit().putInt(VIDEO_AUTOPLAY_LIMIT, supportedLimit).apply()
+        }
+
+    var circularScroll: Boolean
+        get() = prefs.getBoolean(CIRCULAR_SCROLL, false)
+        set(circularScroll) = prefs.edit().putBoolean(CIRCULAR_SCROLL, circularScroll).apply()
+
     var animateGifs: Boolean
         get() = prefs.getBoolean(ANIMATE_GIFS, false)
         set(animateGifs) = prefs.edit().putBoolean(ANIMATE_GIFS, animateGifs).apply()

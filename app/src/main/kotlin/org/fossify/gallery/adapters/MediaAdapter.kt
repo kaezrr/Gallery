@@ -12,6 +12,8 @@ import android.widget.Toast
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.view.allViews
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.gif.GifDrawable
 import com.qtalk.recyclerviewfastscroller.RecyclerViewFastScroller
@@ -107,9 +109,10 @@ class MediaAdapter(
     val isAGetIntent: Boolean,
     val allowMultiplePicks: Boolean,
     val path: String,
-    recyclerView: MyRecyclerView,
+    private val gridView: MyRecyclerView,
+    circularScrollEnabled: Boolean = false,
     itemClick: (Any) -> Unit
-) : MyRecyclerViewAdapter(activity, recyclerView, itemClick),
+) : MyRecyclerViewAdapter(activity, gridView, itemClick),
     RecyclerViewFastScroller.OnPopupTextUpdate {
 
     private val ITEM_SECTION = 0
@@ -128,6 +131,8 @@ class MediaAdapter(
     private var cropThumbnails = config.cropThumbnails
     private var displayFilenames = config.displayFileNames
     private var showFileTypes = config.showThumbnailFileTypes
+    private var circularScrollingRequested = circularScrollEnabled && !isListViewType && !isAGetIntent
+    val isCircularScrolling get() = circularScrollingRequested && media.size > 1
     var videoThumbnailPlaybackCoordinator: VideoThumbnailPlaybackCoordinator? = null
 
     var sorting = config.getFolderSorting(if (config.showAll) SHOW_ALL else path)
@@ -136,6 +141,11 @@ class MediaAdapter(
 
     init {
         setupDragListener(true)
+        gridView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                recenterIfNeeded()
+            }
+        })
     }
 
     override fun getActionMenuId() = R.menu.cab_media
@@ -162,7 +172,7 @@ class MediaAdapter(
     }
 
     override fun onBindViewHolder(holder: MyRecyclerViewAdapter.ViewHolder, position: Int) {
-        val tmbItem = media.getOrNull(position) ?: return
+        val tmbItem = media.getOrNull(toMediaPosition(position)) ?: return
         val allowLongPress = (!isAGetIntent || allowMultiplePicks) && tmbItem is Medium
         holder.bindView(tmbItem, tmbItem is Medium, allowLongPress) { itemView, adapterPosition ->
             if (tmbItem is Medium) {
@@ -178,7 +188,7 @@ class MediaAdapter(
         super.onViewAttachedToWindow(holder)
         startGifAnimation(holder.itemView)
         val position = holder.bindingAdapterPosition
-        val section = media.getOrNull(position) is ThumbnailSection
+        val section = media.getOrNull(toMediaPosition(position)) is ThumbnailSection
         val params = holder.itemView.layoutParams as? StaggeredGridLayoutManager.LayoutParams
         params?.isFullSpan = section
         videoThumbnailPlaybackCoordinator?.onGridCellAttached()
@@ -190,10 +200,10 @@ class MediaAdapter(
         super.onViewDetachedFromWindow(holder)
     }
 
-    override fun getItemCount() = media.size
+    override fun getItemCount() = if (isCircularScrolling) media.size * 3 else media.size
 
     override fun getItemViewType(position: Int): Int {
-        val tmbItem = media[position]
+        val tmbItem = media[toMediaPosition(position)]
         return when {
             tmbItem is ThumbnailSection -> ITEM_SECTION
             (tmbItem as Medium).isVideo() || tmbItem.isPortrait() -> ITEM_MEDIUM_VIDEO_PORTRAIT
@@ -263,9 +273,12 @@ class MediaAdapter(
 
     override fun getIsItemSelectable(position: Int) = !isASectionTitle(position)
 
-    override fun getItemSelectionKey(position: Int) = (media.getOrNull(position) as? Medium)?.path?.hashCode()
+    override fun getItemSelectionKey(position: Int) = (media.getOrNull(toMediaPosition(position)) as? Medium)?.path?.hashCode()
 
-    override fun getItemKeyPosition(key: Int) = media.indexOfFirst { (it as? Medium)?.path?.hashCode() == key }
+    override fun getItemKeyPosition(key: Int): Int {
+        val index = media.indexOfFirst { (it as? Medium)?.path?.hashCode() == key }
+        return if (index >= 0 && isCircularScrolling) media.size + index else index
+    }
 
     override fun onActionModeCreated() {}
 
@@ -284,7 +297,55 @@ class MediaAdapter(
         }
     }
 
-    fun isASectionTitle(position: Int) = media.getOrNull(position) is ThumbnailSection
+    fun isASectionTitle(position: Int) = media.getOrNull(toMediaPosition(position)) is ThumbnailSection
+
+    private fun toMediaPosition(position: Int): Int {
+        if (media.isEmpty()) return -1
+        return if (isCircularScrolling) position % media.size else position
+    }
+
+    fun updateCircularScrolling(enabled: Boolean) {
+        val shouldEnable = enabled && !isListViewType && !isAGetIntent
+        if (circularScrollingRequested != shouldEnable) {
+            val firstVisiblePosition = (gridView.layoutManager as? LinearLayoutManager)
+                ?.findFirstVisibleItemPosition()
+                ?.takeIf { it != RecyclerView.NO_POSITION }
+            circularScrollingRequested = shouldEnable
+            notifyDataSetChanged()
+            if (isCircularScrolling) {
+                centerCircularScroll()
+            } else if (firstVisiblePosition != null && media.isNotEmpty()) {
+                val canonicalPosition = firstVisiblePosition % media.size
+                gridView.post { gridView.scrollToPosition(canonicalPosition) }
+            }
+        }
+    }
+
+    fun centerCircularScroll() {
+        if (isCircularScrolling) {
+            gridView.post { gridView.scrollToPosition(media.size) }
+        }
+    }
+
+    private fun recenterIfNeeded() {
+        if (!isCircularScrolling) return
+        val layoutManager = gridView.layoutManager ?: return
+        val first = when (layoutManager) {
+            is LinearLayoutManager -> layoutManager.findFirstVisibleItemPosition()
+            is StaggeredGridLayoutManager -> layoutManager.findFirstVisibleItemPositions(null).minOrNull() ?: RecyclerView.NO_POSITION
+            else -> RecyclerView.NO_POSITION
+        }
+        val last = when (layoutManager) {
+            is LinearLayoutManager -> layoutManager.findLastVisibleItemPosition()
+            is StaggeredGridLayoutManager -> layoutManager.findLastVisibleItemPositions(null).maxOrNull() ?: RecyclerView.NO_POSITION
+            else -> RecyclerView.NO_POSITION
+        }
+        if (first == RecyclerView.NO_POSITION || last == RecyclerView.NO_POSITION) return
+        val size = media.size
+        if (first < size / 2 || last >= size * 5 / 2) {
+            gridView.post { gridView.scrollToPosition(size + first % size) }
+        }
+    }
 
     private fun checkHideBtnVisibility(menu: Menu, selectedItems: ArrayList<Medium>) {
         val isInRecycleBin = selectedItems.firstOrNull()?.getIsInRecycleBin() == true
@@ -637,13 +698,32 @@ class MediaAdapter(
                 media.removeAll(removeMedia)
                 listener?.tryDeleteFiles(fileDirItems, skipRecycleBin)
                 listener?.updateMediaGridDecoration(media)
-                removeSelectedItems(positions)
+                if (isCircularScrolling) {
+                    selectedKeys.clear()
+                    finishActMode()
+                    notifyDataSetChanged()
+                } else {
+                    removeSelectedItems(positions)
+                }
                 currentMediaHash = media.hashCode()
             }
         }
     }
 
     private fun getSelectedItems() = selectedKeys.mapNotNull { getItemWithKey(it) } as ArrayList<Medium>
+
+    private fun notifyMediumChanged(path: String) {
+        val index = media.indexOfFirst { (it as? Medium)?.path == path }
+        if (index < 0) return
+        if (isCircularScrolling) {
+            val size = media.size
+            notifyItemChanged(index)
+            notifyItemChanged(size + index)
+            notifyItemChanged(size * 2 + index)
+        } else {
+            notifyItemChanged(index)
+        }
+    }
 
     private fun getSelectedPaths() = getSelectedItems().map { it.path } as ArrayList<String>
 
@@ -658,6 +738,7 @@ class MediaAdapter(
             media = thumbnailItems
             notifyDataSetChanged()
             finishActMode()
+            centerCircularScroll()
             videoThumbnailPlaybackCoordinator?.scheduleReconcile()
         }
     }
@@ -704,8 +785,7 @@ class MediaAdapter(
                 if (cachedRatio == null) {
                     ThumbnailAspectRatio.load(root.context, medium.path, medium.isVideo()) {
                         if (!isListViewType && !cropThumbnails && !scrollHorizontally) {
-                            val currentPosition = media.indexOfFirst { it is Medium && it.path == medium.path }
-                            if (currentPosition >= 0) notifyItemChanged(currentPosition)
+                            notifyMediumChanged(medium.path)
                         }
                     }
                 }
@@ -783,8 +863,7 @@ class MediaAdapter(
                                 activity.mediaDB.updateVideoDuration(medium.path, duration)
                             }
                         }
-                        val currentPosition = media.indexOfFirst { it is Medium && it.path == medium.path }
-                        if (currentPosition >= 0) notifyItemChanged(currentPosition)
+                        notifyMediumChanged(medium.path)
                     }
                 }
                 videoDuration?.text = medium.videoDuration.getFormattedDuration()
@@ -872,8 +951,8 @@ class MediaAdapter(
     }
 
     override fun onChange(position: Int): String {
-        var realIndex = position
-        if (isASectionTitle(position)) {
+        var realIndex = toMediaPosition(position)
+        if (media.getOrNull(realIndex) is ThumbnailSection) {
             realIndex++
         }
 

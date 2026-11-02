@@ -52,6 +52,12 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
     override fun onResume() {
         super.onResume()
         updateMenuColors()
+        getMediaAdapter()?.updateCircularScrolling(config.circularScroll && config.getFolderViewType(SHOW_ALL) == VIEW_TYPE_GRID)
+        if (getMediaAdapter() != null) handleGridSpacing(mAllMedia)
+        binding.searchMenu.requireToolbar().menu.findItem(R.id.toggle_circular_scroll).apply {
+            isVisible = config.getFolderViewType(SHOW_ALL) == VIEW_TYPE_GRID
+            isChecked = config.circularScroll
+        }
     }
 
     override fun onDestroy() {
@@ -83,10 +89,21 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
         binding.searchMenu.requireToolbar().setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.toggle_filename -> toggleFilenameVisibility()
+                R.id.toggle_circular_scroll -> toggleCircularScrolling()
                 else -> return@setOnMenuItemClickListener false
             }
             return@setOnMenuItemClickListener true
         }
+    }
+
+    private fun toggleCircularScrolling() {
+        config.circularScroll = !config.circularScroll
+        if (config.circularScroll) config.enablePullToRefresh = false
+        getMediaAdapter()?.updateCircularScrolling(config.circularScroll && config.getFolderViewType(SHOW_ALL) == VIEW_TYPE_GRID)
+        handleGridSpacing(mAllMedia)
+        binding.searchGrid.invalidateItemDecorations()
+        getMediaAdapter()?.centerCircularScroll()
+        binding.searchMenu.requireToolbar().menu.findItem(R.id.toggle_circular_scroll).isChecked = config.circularScroll
     }
 
     private fun updateMenuColors() {
@@ -118,7 +135,10 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
     private fun setupAdapter() {
         val currAdapter = binding.searchGrid.adapter
         if (currAdapter == null) {
-            MediaAdapter(this, mAllMedia, this, false, false, "", binding.searchGrid) {
+            MediaAdapter(
+                this, mAllMedia, this, false, false, "", binding.searchGrid,
+                circularScrollEnabled = config.circularScroll && config.getFolderViewType(SHOW_ALL) == VIEW_TYPE_GRID
+            ) {
                 if (it is Medium) {
                     itemClicked(it.path)
                 }
@@ -127,6 +147,7 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
             }
             setupLayoutManager()
             handleGridSpacing(mAllMedia)
+            getMediaAdapter()?.centerCircularScroll()
         } else if (mLastSearchedText.isEmpty()) {
             (currAdapter as MediaAdapter).updateMedia(mAllMedia)
             handleGridSpacing(mAllMedia)
@@ -146,7 +167,10 @@ class SearchActivity : SimpleActivity(), MediaOperationsListener {
 
             val spanCount = config.mediaColumnCnt
             val spacing = config.thumbnailSpacing
-            val decoration = GridSpacingItemDecoration(spanCount, spacing, config.scrollHorizontally, config.fileRoundedCorners, media, true)
+            val decoration = GridSpacingItemDecoration(
+                spanCount, spacing, config.scrollHorizontally, config.fileRoundedCorners, media, true,
+                getMediaAdapter()?.isCircularScrolling == true
+            )
             binding.searchGrid.addItemDecoration(decoration)
         }
     }

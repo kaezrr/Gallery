@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_launcher_name">Gallery</string>
+    <string name="video_autoplay_limit">Simultaneous video previews</string>
+    <string name="video_autoplay_limit_low">Low (2 videos)</string>
+    <string name="video_autoplay_limit_medium">Medium (4 videos)</string>
+    <string name="video_autoplay_limit_high">High (6 videos)</string>
+    <string name="mute_videos_by_default">Mute videos by default</string>
+    <string name="circular_scroll">Circular scrolling</string>
     <string name="edit">Edit</string>
     <string name="open_camera">Open camera</string>
     <string name="hidden">(hidden)</string>
