@@ -1177,8 +1177,7 @@ class MainActivity : SimpleActivity(), DirectoryOperationsListener {
             favoritePaths = favoritePaths,
             getFavoritePathsOnly = false,
             getProperDateTaken = true,
-            dateTakens = dateTakens,
-            getVideoDurations = config.showThumbnailVideoDuration
+            dateTakens = dateTakens
         )
         try {
             for (directory in dirs) {

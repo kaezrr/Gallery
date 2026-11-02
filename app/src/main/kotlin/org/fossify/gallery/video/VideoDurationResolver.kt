@@ -5,7 +5,6 @@ import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
-import androidx.media3.common.util.UnstableApi
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -65,7 +64,6 @@ object VideoDurationResolver {
         }
     }
 
-    @OptIn(UnstableApi::class)
     private fun resolveDuration(context: Context, path: String): Int {
         val platformDuration = try {
             MediaMetadataRetriever().useRetriever { retriever ->
@@ -80,12 +78,7 @@ object VideoDurationResolver {
             0
         }
         if (platformDuration > 0) return platformDuration
-
-        return try {
-            context.getMedia3VideoDurationSeconds(path)
-        } catch (_: Exception) {
-            0
-        }
+        return 0
     }
 
     private inline fun <T> MediaMetadataRetriever.useRetriever(block: (MediaMetadataRetriever) -> T): T {
