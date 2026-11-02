@@ -13,6 +13,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.view.allViews
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.resource.gif.GifDrawable
 import com.qtalk.recyclerviewfastscroller.RecyclerViewFastScroller
 import org.fossify.commons.activities.BaseSimpleActivity
 import org.fossify.commons.adapters.MyRecyclerViewAdapter
@@ -175,6 +176,7 @@ class MediaAdapter(
 
     override fun onViewAttachedToWindow(holder: MyRecyclerViewAdapter.ViewHolder) {
         super.onViewAttachedToWindow(holder)
+        startGifAnimation(holder.itemView)
         val position = holder.bindingAdapterPosition
         val section = media.getOrNull(position) is ThumbnailSection
         val params = holder.itemView.layoutParams as? StaggeredGridLayoutManager.LayoutParams
@@ -183,6 +185,7 @@ class MediaAdapter(
     }
 
     override fun onViewDetachedFromWindow(holder: MyRecyclerViewAdapter.ViewHolder) {
+        stopGifAnimation(holder.itemView)
         videoThumbnailPlaybackCoordinator?.onGridCellDetached(holder.itemView)
         super.onViewDetachedFromWindow(holder)
     }
@@ -275,6 +278,7 @@ class MediaAdapter(
             val itemView = holder.itemView
             val tmb = itemView.allViews.firstOrNull { it.id == R.id.medium_thumbnail }
             if (tmb != null) {
+                stopGifAnimation(itemView)
                 Glide.with(activity).clear(tmb)
             }
         }
@@ -818,6 +822,14 @@ class MediaAdapter(
                     else -> R.drawable.placeholder_square
                 }
             )
+            mediaItemHolder.setBackgroundResource(
+                when (roundedCorners) {
+                    ROUNDED_CORNERS_SMALL -> R.drawable.placeholder_rounded_small
+                    ROUNDED_CORNERS_BIG -> R.drawable.placeholder_rounded_big
+                    else -> R.drawable.placeholder_square
+                }
+            )
+            mediaItemHolder.clipToOutline = roundedCorners != ROUNDED_CORNERS_NONE
 
             activity.loadImage(
                 type = medium.type,
@@ -840,6 +852,16 @@ class MediaAdapter(
                 playPortraitOutline?.applyColorFilter(textColor)
             }
         }
+    }
+
+    private fun startGifAnimation(itemView: View) {
+        val thumbnail = itemView.findViewById<ImageView>(R.id.medium_thumbnail)
+        (thumbnail?.drawable as? GifDrawable)?.start()
+    }
+
+    private fun stopGifAnimation(itemView: View) {
+        val thumbnail = itemView.findViewById<ImageView>(R.id.medium_thumbnail)
+        (thumbnail?.drawable as? GifDrawable)?.stop()
     }
 
     private fun setupSection(view: View, section: ThumbnailSection) {

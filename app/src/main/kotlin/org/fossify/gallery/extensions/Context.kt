@@ -30,6 +30,7 @@ import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.FitCenter
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import com.bumptech.glide.load.resource.gif.GifDrawable
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
@@ -702,8 +703,8 @@ fun Context.loadImageBase(
         options.optionalTransform(WebpDrawable::class.java, WebpDrawableTransformation(FitCenter()))
     }
 
-    // animation is only supported without rounded corners and the file must be a GIF or WEBP.
-    if (animate && roundCorners == ROUNDED_CORNERS_NONE && (path.isGif() || path.isWebP())) {
+    val animateImage = animate && (path.isGif() || path.isWebP())
+    if (animateImage) {
         // this is required to make glide cache aware of changes
         options.decode(Drawable::class.java)
     } else {
@@ -712,7 +713,10 @@ fun Context.loadImageBase(
         options.decode(Bitmap::class.java)
     }
 
-    if (roundCorners != ROUNDED_CORNERS_NONE) {
+    // Animated drawables are clipped by the thumbnail view's rounded outline.
+    // Applying a bitmap corner transform here would otherwise force a static frame.
+    target.clipToOutline = roundCorners != ROUNDED_CORNERS_NONE
+    if (roundCorners != ROUNDED_CORNERS_NONE && !animateImage) {
         val cornerSize =
             if (roundCorners == ROUNDED_CORNERS_SMALL) org.fossify.commons.R.dimen.rounded_corner_radius_small else org.fossify.commons.R.dimen.rounded_corner_radius_big
         val cornerRadius = resources.getDimension(cornerSize).toInt()
@@ -764,7 +768,15 @@ fun Context.loadImageBase(
             targetBitmap: Target<Drawable>,
             dataSource: DataSource,
             isFirstResource: Boolean,
-        ) = false
+        ): Boolean {
+            if (animateImage && path.isGif()) {
+                (resource as? GifDrawable)?.let { gif ->
+                    gif.setLoopCount(GifDrawable.LOOP_FOREVER)
+                    if (target.isAttachedToWindow) gif.start() else gif.stop()
+                }
+            }
+            return false
+        }
     })
 
     builder.into(target)

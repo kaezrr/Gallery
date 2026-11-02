@@ -891,6 +891,7 @@ class DirectoryAdapter(
                         else -> R.drawable.placeholder_square
                     }
                 )
+                dirThumbnail.clipToOutline = roundedCorners != ROUNDED_CORNERS_NONE
 
                 activity.loadImage(
                     type = thumbnailType,

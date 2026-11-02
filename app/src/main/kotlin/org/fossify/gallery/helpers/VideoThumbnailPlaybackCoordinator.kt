@@ -1,6 +1,7 @@
 package org.fossify.gallery.helpers
 
 import android.content.Context
+import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.os.Handler
@@ -14,6 +15,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -50,7 +52,7 @@ class VideoThumbnailPlaybackCoordinator(
         val itemView: View,
         val textureView: TextureView,
         val thumbnail: ImageView,
-        val playIcon: View,
+        val playIconHolder: View,
         val visibleFraction: Float,
         val normalizedCenterX: Float,
         val normalizedCenterY: Float,
@@ -64,7 +66,8 @@ class VideoThumbnailPlaybackCoordinator(
         var itemView: View? = null
         var textureView: TextureView? = null
         var thumbnail: ImageView? = null
-        var playIcon: View? = null
+        var playIconHolder: View? = null
+        var videoSize: VideoSize? = null
         var surface: Surface? = null
         var surfaceListener: TextureView.SurfaceTextureListener? = null
         var playerListener: Player.Listener? = null
@@ -107,11 +110,13 @@ class VideoThumbnailPlaybackCoordinator(
             detachSurface()
             textureView?.alpha = 0f
             thumbnail?.visibility = View.VISIBLE
-            playIcon?.visibility = View.VISIBLE
+            playIconHolder?.visibility = View.VISIBLE
+            textureView?.setTransform(Matrix())
             itemView = null
             textureView = null
             thumbnail = null
-            playIcon = null
+            playIconHolder = null
+            videoSize = null
         }
 
         fun clearAssignment() {
@@ -327,14 +332,14 @@ class VideoThumbnailPlaybackCoordinator(
             val centerProximity = (1f - hypot(centeredX, centeredY) / sqrt(2f)).coerceIn(0f, 1f)
             val texture = itemView.findViewById<TextureView>(R.id.video_preview_surface) ?: continue
             val thumbnail = itemView.findViewById<ImageView>(R.id.medium_thumbnail) ?: continue
-            val playIcon = itemView.findViewById<View>(R.id.play_portrait_outline) ?: continue
+            val playIconHolder = itemView.findViewById<View>(R.id.play_icon_holder) ?: continue
             cells.add(
                 Cell(
                     medium.path,
                     itemView,
                     texture,
                     thumbnail,
-                    playIcon,
+                    playIconHolder,
                     fraction,
                     centerX.coerceIn(0f, 1f),
                     centerY.coerceIn(0f, 1f),
@@ -367,7 +372,7 @@ class VideoThumbnailPlaybackCoordinator(
             slot.itemView = cell.itemView
             slot.textureView = cell.textureView
             slot.thumbnail = cell.thumbnail
-            slot.playIcon = cell.playIcon
+            slot.playIconHolder = cell.playIconHolder
         }
 
         val player = slot.ensurePlayer()
@@ -379,13 +384,13 @@ class VideoThumbnailPlaybackCoordinator(
             slot.path = cell.path
             slot.mediaId = "video-preview-${++nextMediaId}"
             cell.thumbnail.visibility = View.VISIBLE
-            cell.playIcon.visibility = View.VISIBLE
+            cell.playIconHolder.visibility = View.VISIBLE
             cell.textureView.alpha = 0f
-            player.videoScalingMode = if (shouldCropVideo()) {
-                C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-            } else {
-                C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            }
+            slot.videoSize = null
+            cell.textureView.setTransform(Matrix())
+            // TextureView stretches its surface buffer to the view bounds. Keep
+            // the decoder in fit mode and apply crop/fit explicitly with a view matrix.
+            player.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
             player.setMediaItem(
                 MediaItem.Builder()
                     .setMediaId(slot.mediaId!!)
@@ -397,6 +402,7 @@ class VideoThumbnailPlaybackCoordinator(
         if (slot.surfaceListener == null || targetChanged) {
             attachSurface(slot, cell.textureView)
         }
+        updateTextureTransform(slot)
         if (newMedia) player.prepare()
         player.playWhenReady = true
     }
@@ -414,7 +420,9 @@ class VideoThumbnailPlaybackCoordinator(
                 slot.player?.setVideoSurface(surface)
             }
 
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
+            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+                updateTextureTransform(slot)
+            }
 
             override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
                 if (slot.textureView === textureView) {
@@ -438,13 +446,20 @@ class VideoThumbnailPlaybackCoordinator(
         val expectedMediaId = slot.mediaId ?: return
         val expectedPath = slot.path ?: return
         val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (slot.mediaId == expectedMediaId && slot.path == expectedPath) {
+                    slot.videoSize = videoSize
+                    updateTextureTransform(slot)
+                }
+            }
+
             override fun onRenderedFirstFrame() {
                 if (slot.mediaId == expectedMediaId && slot.path == expectedPath
                     && player.currentMediaItem?.mediaId == expectedMediaId
                     && player.playWhenReady && slot.surface != null && slot.itemView != null
                 ) {
                     slot.thumbnail?.visibility = View.INVISIBLE
-                    slot.playIcon?.visibility = View.GONE
+                    slot.playIconHolder?.visibility = View.GONE
                     slot.textureView?.alpha = 1f
                 }
             }
@@ -469,7 +484,40 @@ class VideoThumbnailPlaybackCoordinator(
     private fun showPoster(slot: PlayerSlot) {
         slot.textureView?.alpha = 0f
         slot.thumbnail?.visibility = View.VISIBLE
-        slot.playIcon?.visibility = View.VISIBLE
+        slot.playIconHolder?.visibility = View.VISIBLE
+    }
+
+    private fun updateTextureTransform(slot: PlayerSlot) {
+        val textureView = slot.textureView ?: return
+        val videoSize = slot.videoSize ?: return
+        val viewWidth = textureView.width.toFloat()
+        val viewHeight = textureView.height.toFloat()
+        if (viewWidth <= 0f || viewHeight <= 0f || videoSize.width <= 0 || videoSize.height <= 0) return
+
+        var videoWidth = videoSize.width * videoSize.pixelWidthHeightRatio
+        var videoHeight = videoSize.height.toFloat()
+        if (videoSize.unappliedRotationDegrees == 90 || videoSize.unappliedRotationDegrees == 270) {
+            val oldWidth = videoWidth
+            videoWidth = videoHeight
+            videoHeight = oldWidth
+        }
+
+        val viewAspect = viewWidth / viewHeight
+        val videoAspect = videoWidth / videoHeight
+        val crop = shouldCropVideo()
+        val scaleX: Float
+        val scaleY: Float
+        if ((videoAspect > viewAspect) == crop) {
+            scaleX = if (crop) videoAspect / viewAspect else 1f
+            scaleY = if (crop) 1f else viewAspect / videoAspect
+        } else {
+            scaleX = if (crop) 1f else videoAspect / viewAspect
+            scaleY = if (crop) viewAspect / videoAspect else 1f
+        }
+
+        textureView.setTransform(Matrix().apply {
+            setScale(scaleX, scaleY, viewWidth / 2f, viewHeight / 2f)
+        })
     }
 
     private fun releasePlayers() {
