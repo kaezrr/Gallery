@@ -304,6 +304,9 @@ class MediaAdapter(
         return if (isCircularScrolling) position % media.size else position
     }
 
+    fun getMediumAtAdapterPosition(position: Int): Medium? =
+        media.getOrNull(toMediaPosition(position)) as? Medium
+
     fun updateCircularScrolling(enabled: Boolean) {
         val shouldEnable = enabled && !isListViewType && !isAGetIntent
         if (circularScrollingRequested != shouldEnable) {

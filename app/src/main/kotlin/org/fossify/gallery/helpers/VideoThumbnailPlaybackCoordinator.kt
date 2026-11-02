@@ -319,7 +319,7 @@ class VideoThumbnailPlaybackCoordinator(
         for (index in 0 until recyclerView.childCount) {
             val itemView = recyclerView.getChildAt(index)
             val position = recyclerView.getChildAdapterPosition(itemView)
-            val medium = adapter.media.getOrNull(position) as? Medium ?: continue
+            val medium = adapter.getMediumAtAdapterPosition(position) ?: continue
             if (!medium.isVideo() || itemView.width <= 0 || itemView.height <= 0) continue
             if (!itemView.getLocalVisibleRect(visibleRect)) continue
 
