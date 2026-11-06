@@ -30,6 +30,7 @@
             packages = [
               pkgs.jdk17
               android.androidsdk
+              pkgs.gh
             ];
 
             ANDROID_HOME = androidSdk;
