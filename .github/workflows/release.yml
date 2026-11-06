@@ -1,10 +1,12 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
     paths:
       - ".fossify/release-marker.txt"
+      - "gradle.properties"
 
 permissions:
   contents: write
