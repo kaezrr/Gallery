@@ -3,13 +3,15 @@
 
   inputs.nixpkgs.url = "https://channels.nixos.org/nixpkgs-unstable/nixexprs.tar.xz";
 
-  outputs = { self, nixpkgs }:
+  outputs =
+    { self, nixpkgs }:
     let
       supportedSystems = [ "x86_64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     in
     {
-      devShells = forAllSystems (system:
+      devShells = forAllSystems (
+        system:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -31,6 +33,8 @@
               pkgs.jdk17
               android.androidsdk
               pkgs.gh
+              pkgs.codex
+              pkgs.bubblewrap
             ];
 
             ANDROID_HOME = androidSdk;
@@ -38,9 +42,9 @@
 
             # Use Nix's aapt2 binary so it runs on NixOS and other systems
             # without relying on the copy downloaded by the Android Gradle plugin.
-            GRADLE_OPTS =
-              "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/build-tools/${buildToolsVersion}/aapt2";
+            GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/build-tools/${buildToolsVersion}/aapt2";
           };
-        });
+        }
+      );
     };
 }
